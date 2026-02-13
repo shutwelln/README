@@ -1,99 +1,81 @@
-# Deployment Playbook  
+# Saverwell Deployment Playbook  
 Lovable + GitHub + Hostinger + Cloudflare
 
-This document defines the standard production deployment process for all Saverwell / SeniorSaver projects.
+This document defines the repeatable deployment process for all Saverwell / SeniorSaver projects.
 
 ---
 
-## Architecture Overview
+# 0. Architecture
 
-### Development
+Development  
 Lovable ↔ GitHub (two-way sync)
 
-### Production
+Production  
 GitHub → Hostinger (via GitHub Actions FTPS deploy)
 
-### Security / CDN
+Security  
 Cloudflare → Hostinger
 
 Assumptions:
 - Vite React app
-- Build output folder = `dist`
+- Build output folder = dist
 - One repo per domain
-- One domain per Hostinger site
 - Dedicated FTP user per domain
 
 ---
 
-# Phase 1 – Connect Lovable to GitHub
+# 1. Connect Lovable to GitHub
 
-1. Open project in Lovable.
-2. Connect to GitHub.
-3. Transfer project into correct GitHub org.
-4. Confirm:
-   - Edits in Lovable create commits in GitHub.
-   - Edits in GitHub sync back to Lovable.
+In Lovable:
+1. Connect to GitHub
+2. Transfer to correct org
+3. Confirm:
+   - Lovable edits create commits in GitHub
+   - GitHub edits sync back to Lovable
 
-At this point, GitHub is the source of truth.
+GitHub is now source of truth.
 
 ---
 
-# Phase 2 – Prepare Hostinger
+# 2. Prepare Hostinger (Per Domain)
 
-For each new domain:
-
-1. Add the domain under **Websites** in Hostinger.
+1. Add domain under Websites.
 2. Confirm document root is:
-   ```
    public_html
-   ```
-
-3. Create a dedicated FTP user:
-   - Directory: `/public_html`
+3. Create dedicated FTP user:
+   - Directory: /public_html
    - Strong password
-   - Save credentials
-
 4. Enable SSL:
    Websites → Manage → SSL → Activate
 
-Do not change nameservers yet.
-
 ---
 
-# Phase 3 – Configure Cloudflare
+# 3. Configure Cloudflare
 
-1. Add the domain to Cloudflare.
-2. Update nameservers at registrar to Cloudflare.
-3. Create DNS records:
+Create DNS records:
 
-A record  
-Name: `@`  
+Type: A  
+Name: @  
 Value: Hostinger server IP  
-Proxy: DNS only (initial setup)
+Proxy: DNS only (initially)
 
-CNAME  
-Name: `www`  
+Type: CNAME  
+Name: www  
 Value: yourdomain.com  
-Proxy: DNS only (initial setup)
+Proxy: DNS only (initially)
 
-Keep FTP and mail records as DNS only.
-
-4. After SSL works, set SSL/TLS mode to:
-   ```
-   Full (strict)
-   ```
+After HTTPS works:
+SSL/TLS Mode → Full (strict)
 
 ---
 
-# Phase 4 – GitHub Deploy Workflow
+# 4. GitHub Deployment Workflow
 
-Create:
+Create this file:
 
-```
 .github/workflows/deploy.yml
-```
 
-Use this template:
+COPY THIS ENTIRE BLOCK:
 
 ```yaml
 name: Deploy to Hostinger
@@ -134,69 +116,62 @@ jobs:
           server-dir: ./
 ```
 
+END COPY BLOCK
+
 Important:
-
-`server-dir: ./`  
-Use this when FTP user is already scoped to `public_html`.
+Use server-dir: ./ when FTP user is scoped to public_html.
 
 ---
 
-# Phase 5 – GitHub Repository Secrets
+# 5. Add GitHub Repository Secrets
 
-In GitHub → Settings → Secrets and variables → Actions
+Go to:
+Repo → Settings → Secrets and variables → Actions
 
-Add:
+Create these secrets:
 
-```
-FTP_SERVER   = Hostinger server IP
-FTP_USERNAME = Dedicated FTP user
-FTP_PASSWORD = FTP password
-```
+FTP_SERVER  
+FTP_USERNAME  
+FTP_PASSWORD  
 
-Each repo gets its own FTP credentials.
+Each repo gets its own secrets.
 
 ---
 
-# Phase 6 – Clean Initial Deployment
+# 6. Clean Initial Deployment
 
 Before first deploy:
 
-1. Open Hostinger File Manager.
-2. Open `public_html`.
-3. Delete everything inside.
-4. Leave empty (or only `.htaccess` if already created).
+1. Open Hostinger File Manager
+2. Open public_html
+3. Delete everything inside
+4. Leave it empty
 
 ---
 
-# Phase 7 – Trigger Deployment
+# 7. Trigger Deployment
 
-1. Commit `deploy.yml` to `main`.
-2. GitHub Actions runs automatically.
-3. Wait for green check.
+1. Commit deploy.yml
+2. Push to main
+3. Wait for GitHub Action to go green
 
-After success:
+After success, public_html must contain:
 
-`public_html` should contain:
+index.html  
+assets/  
+favicon files  
 
-```
-index.html
-assets/
-favicon files
-```
-
-No nested `public_html` folders.
+No nested public_html folder.
 
 ---
 
-# Phase 8 – SPA Routing (React Router)
+# 8. Add SPA Routing (React Router)
 
-Create:
+Create this file:
 
-```
 public_html/.htaccess
-```
 
-With:
+COPY THIS ENTIRE BLOCK:
 
 ```apache
 RewriteEngine On
@@ -207,91 +182,75 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule . /index.html [L]
 ```
 
+END COPY BLOCK
+
 Required for client-side routing.
 
 ---
 
-# Phase 9 – Validate Before Proxy
+# 9. Validate Before Proxy
 
-Test:
+Run:
 
-```
-curl -I http://yourdomain.com
-curl -I https://yourdomain.com
-```
+curl -I http://yourdomain.com  
+curl -I https://yourdomain.com  
 
 Expected:
-- HTTP → 301 redirect to HTTPS
-- HTTPS → 200
+HTTP → 301  
+HTTPS → 200  
 
 If successful:
-
-Switch Cloudflare `@` and `www` to **Proxied**.
+Switch Cloudflare @ and www to Proxied.
 
 ---
 
-# Phase 10 – Cloudflare Hardening
+# 10. Cloudflare Hardening
 
 Enable:
 
-- Always Use HTTPS
-- Auto Minify (HTML, CSS, JS)
-- Brotli
-- SSL Mode: Full (strict)
+Always Use HTTPS  
+Auto Minify  
+Brotli  
+SSL Mode: Full (strict)
 
-Keep:
-- FTP
-- Mail
-as DNS only.
+Keep FTP and mail DNS records as DNS only.
 
 ---
 
 # Troubleshooting
 
-### 403 on HTTPS
-- Files must be directly inside `public_html`
-- No nested `public_html/public_html`
-- `index.html` must exist
-- Folder permission: 755
-- File permission: 644
+403 on HTTPS
+- Files must be directly inside public_html
+- No nested public_html/public_html
+- index.html must exist
+- Permissions: folder 755, files 644
 
-### Duplicate Nested Folder
+Duplicate Nested Folder
 If deploy creates:
-```
-public_html/public_html/
-```
+public_html/public_html
+
 Change:
-```
 server-dir: public_html/
-```
 to:
-```
 server-dir: ./
-```
 
-### Deep Links 404
-`.htaccess` missing or incorrect.
+Deep Links 404
+.htaccess missing or incorrect.
 
-### Deploy Succeeds But No Files
-Incorrect `server-dir`
-or FTP user scoped to wrong directory.
+Deploy Succeeds But No Files
+Wrong server-dir or FTP user directory scope.
 
 ---
 
-# Standard Workflow for New Sites
+# Repeat For New Sites
 
 For each new domain:
 
-1. Create new GitHub repo.
-2. Connect Lovable.
-3. Create FTP user in Hostinger.
-4. Add repo secrets.
-5. Copy deploy.yml.
-6. Clean public_html.
-7. Deploy.
-8. Configure Cloudflare.
-
----
-
-This is the standard Saverwell production deployment model.
-re
+1. Create new repo
+2. Connect Lovable
+3. Create FTP user
+4. Add repo secrets
+5. Copy deploy.yml
+6. Clean public_html
+7. Deploy
+8. Configure Cloudflare
